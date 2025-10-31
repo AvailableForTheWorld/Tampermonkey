@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Open all links in new tab
+// @name         在新标签页打开链接（可取消）Open all links in new tab
 // @namespace    http://tampermonkey.net/
-// @version      0.0.4
-// @description  Force all links to open in a new tab with domain-specific toggle
-// @author       You
+// @version      0.0.5
+// @description  强制在新标签页打开链接， 点击当前脚本可以disable取消强制效果，再次点击可重启强制效果 Force all links to open in a new tab with domain-specific toggle
+// @author       AvailableForTheWorld
 // @match        *://*/*
 // @icon         https://www.svgrepo.com/show/207466/blank-page-list.svg
 // @grant        GM_setValue
