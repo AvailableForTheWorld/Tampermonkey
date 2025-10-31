@@ -10,8 +10,8 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
-// @downloadURL  https://raw.githubusercontent.com/AvailableForTheWorld/Tampermonkey/master/scripts/link-jump-blank/index.user.js
-// @updateURL    https://raw.githubusercontent.com/AvailableForTheWorld/Tampermonkey/master/scripts/link-jump-blank/index.user.js
+// @downloadURL  https://github.com/AvailableForTheWorld/Tampermonkey/raw/refs/heads/master/scripts/link-jump-blank/index.user.js
+// @updateURL    https://github.com/AvailableForTheWorld/Tampermonkey/raw/refs/heads/master/scripts/link-jump-blank/index.user.js
 // ==/UserScript==
 
 (function() {
