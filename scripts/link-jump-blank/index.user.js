@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         在新标签页打开链接（可取消）Open all links in new tab
 // @namespace    http://tampermonkey.net/
-// @version      0.0.5
+// @version      0.0.6
 // @description  强制在新标签页打开链接， 点击当前脚本可以disable取消强制效果，再次点击可重启强制效果 Force all links to open in a new tab with domain-specific toggle
 // @author       AvailableForTheWorld
 // @match        *://*/*
@@ -14,20 +14,17 @@
 // @updateURL    https://github.com/AvailableForTheWorld/Tampermonkey/raw/refs/heads/master/scripts/link-jump-blank/index.user.js
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
-    // 获取当前域名
     const currentDomain = window.location.hostname;
-
-    // 检查当前域名是否被禁用
     const disabledDomains = GM_getValue('disabledDomains', {});
     const isDisabled = disabledDomains[currentDomain];
 
-    // 注册菜单命令
+    // 始终注册菜单命令
     registerMenuCommands();
 
-    // 如果当前域名未禁用，则处理链接
+    // 仅当在此域名未禁用时，才执行修改链接的逻辑
     if (!isDisabled) {
         processLinks();
         setupMutationObserver();
@@ -37,36 +34,42 @@
         const disabledDomains = GM_getValue('disabledDomains', {});
         const isDisabled = disabledDomains[currentDomain];
 
-        // 注册切换当前域名状态的菜单命令
+        // 先尝试取消可能存在的旧菜单（如果Tampermonkey API支持的话，但通常不需要）
+        // 菜单命令的名称是唯一的，重复注册通常会产生多个菜单项。
+
         if (isDisabled) {
-            GM_registerMenuCommand(`✓ Enable on ${currentDomain}`, function() {
-                toggleCurrentDomain(false);
-                // 刷新页面使更改生效
-                window.location.reload();
-            });
+            GM_registerMenuCommand(`✅ 在此网站启用“新标签页打开”`, enableScriptOnSite);
         } else {
-            GM_registerMenuCommand(`✗ Disable on ${currentDomain}`, function() {
-                toggleCurrentDomain(true);
-                // 刷新页面使更改生效
-                window.location.reload();
-            });
+            GM_registerMenuCommand(`❌ 在此网站禁用“新标签页打开”`, disableScriptOnSite);
         }
 
-        // 注册管理所有域名的菜单命令
-        GM_registerMenuCommand('📋 Manage domain settings', showDomainManager);
+        GM_registerMenuCommand('📋 管理所有已禁用的网站', showDomainManager);
+    }
+
+    function enableScriptOnSite() {
+        toggleCurrentDomain(false);
+        showReloadNotification("功能已启用！");
+    }
+
+    function disableScriptOnSite() {
+        toggleCurrentDomain(true);
+        showReloadNotification("功能已禁用！");
     }
 
     function toggleCurrentDomain(disable) {
         const disabledDomains = GM_getValue('disabledDomains', {});
-
         if (disable) {
-            // 禁用当前域名
             disabledDomains[currentDomain] = true;
-            GM_setValue('disabledDomains', disabledDomains);
         } else {
-            // 启用当前域名
             delete disabledDomains[currentDomain];
-            GM_setValue('disabledDomains', disabledDomains);
+        }
+        GM_setValue('disabledDomains', disabledDomains);
+    }
+
+    function showReloadNotification(message) {
+        // 提供一个更友好的提示，建议用户刷新
+        if (confirm(`${message} 需要刷新页面才能生效。立即刷新？`)) {
+            window.location.reload();
         }
     }
 
@@ -81,9 +84,9 @@
     }
 
     function setupMutationObserver() {
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                mutation.addedNodes.forEach(function(node) {
+        const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+                mutation.addedNodes.forEach(function (node) {
                     if (node.nodeType === 1) { // Element node
                         if (node.tagName === 'A') {
                             if (!node.target || node.target === '_self') {
@@ -91,7 +94,7 @@
                             }
                         } else if (node.querySelectorAll) {
                             const newLinks = node.querySelectorAll('a');
-                            newLinks.forEach(function(link) {
+                            newLinks.forEach(function (link) {
                                 if (!link.target || link.target === '_self') {
                                     link.target = '_blank';
                                 }
