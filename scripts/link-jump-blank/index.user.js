@@ -36,7 +36,7 @@
   function safeOpenInTab(url, options) {
     const now = Date.now()
     // 如果在短时间内对同一个 URL 重复请求，则忽略
-    if (now - lastOpenTime < 500 && url === lastOpenUrl) {
+    if (now - lastOpenTime < 2000 && url === lastOpenUrl) {
       console.log('拦截到重复打开请求:', url)
       return
     }
@@ -59,6 +59,8 @@
         // 此时我们记录时间，以便后续的 pushState/hashchange 忽略此次导航引起的路由变化
         if (target.target === '_blank') {
           lastTriggerTime = Date.now()
+          lastOpenTime = Date.now() // 同时更新 lastOpenTime，视为已打开
+          lastOpenUrl = target.href // 记录 URL
           console.log('检测到点击 _blank 链接，标记 lastTriggerTime')
         }
       }
@@ -87,7 +89,7 @@
     if (isDisabled) return originalReplaceState.apply(this, arguments)
 
     console.log('检测到 replaceState 路由变化，新路由:', url)
-    handleRoutingChange(url)
+    // handleRoutingChange(url) // Bilibili 等网站会在点击后立即调用 replaceState 更新 URL，导致重复打开。通常 replaceState 不应视为新页面跳转。
     // 同样允许原页面执行 replaceState
     return originalReplaceState.apply(this, arguments)
   }
@@ -109,7 +111,7 @@
     }
 
     // 如果最近刚刚触发了打开新窗口（例如用户点击了链接），则忽略此次路由变化
-    if (Date.now() - lastTriggerTime < 500) {
+    if (Date.now() - lastTriggerTime < 2000) {
       console.log('检测到刚触发过打开操作，忽略本次路由变化')
       return
     }
