@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         在新标签页打开链接（可取消 + 聚焦新页）
 // @namespace    http://tampermonkey.net/
-// @version      0.0.9
+// @version      0.0.10
 // @description  强制所有链接和 SPA 路由在新标签页打开并立即聚焦，新页面获得焦点，当前页保持不动。支持按域名禁用。
 // @author       AvailableForTheWorld + Grok
 // @match        *://*/*
@@ -88,11 +88,64 @@
   // 如果当前域名被禁用，直接结束
   if (isDisabled) return
 
-  // === 1. 强制普通链接在新标签页打开（并观察动态添加的链接）===
+  // === 1. 全局点击拦截（确保只有一份页面实例）===
+  // 使用捕获阶段拦截所有点击，防止原页面跳转（通过 stopPropagation）
+  window.addEventListener(
+    'click',
+    (e) => {
+      // 1. 如果按下了修饰键（Ctrl/Meta/Shift/Alt），由浏览器默认处理（通常是后台打开或新窗口）
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return
+      // 2. 仅处理鼠标左键
+      if (e.button !== 0) return
+
+      let target = e.target
+      while (target && target.tagName !== 'A') {
+        target = target.parentNode
+      }
+
+      if (!target || !target.href) return
+
+      // 忽略非 HTTP 协议链接 (javascript:, tel:, mailto: 等)
+      if (!target.href.startsWith('http')) return
+
+      // 检查是否为本页锚点跳转
+      try {
+        const urlObj = new URL(target.href)
+        if (
+          urlObj.origin === location.origin &&
+          urlObj.pathname === location.pathname &&
+          urlObj.search === location.search
+        ) {
+          return // 仅哈希变化或相同页面，允许默认行为
+        }
+      } catch (err) {
+        return
+      }
+
+      // === 拦截逻辑 ===
+      // 阻止默认行为（防止原页面跳转）和冒泡（防止网站 SPA 路由接管）
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+
+      const url = target.href
+
+      // 记录触发时间，通知 pushState/replaceState 忽略
+      lastTriggerTime = Date.now()
+      sessionStorage.setItem('openedByScript', 'true')
+
+      console.log('【新标签页脚本】拦截点击 → 新标签页打开:', url)
+      safeOpenInTab(url, { active: true })
+    },
+    true // Capture phase
+  )
+
+  // === 2. 辅助功能：给链接添加 _blank 样式（视觉提示）===
+  // 虽然点击被拦截了，但保留这个为了让用户 hover 时看到 cursor 变化或浏览器提示
   function setTargetBlank(node) {
     if (node.tagName === 'A' && (!node.target || node.target === '_self')) {
       node.target = '_blank'
-      node.rel = 'noopener noreferrer' // 安全 + 性能
+      node.rel = 'noopener noreferrer'
     }
   }
 
@@ -113,7 +166,7 @@
   observer.observe(document.body, { childList: true, subtree: true })
   processLinks()
 
-  // === 2. 拦截 SPA 路由（pushState / hashchange）并在新标签页打开 + 聚焦 ===
+  // === 3. 拦截 SPA 路由（pushState / hashchange）===
   const origPushState = history.pushState
   const origReplaceState = history.replaceState
 
@@ -127,18 +180,22 @@
     } catch {}
 
     if (fullUrl === location.href) return origPushState.apply(this, arguments)
+
+    // 如果最近刚点击过链接（被 click 拦截处理了），则忽略此次 pushState
     if (Date.now() - lastTriggerTime < 2000) return
 
     lastTriggerTime = Date.now()
     sessionStorage.setItem('openedByScript', 'true')
     setTimeout(() => safeOpenInTab(fullUrl, { active: true }), 50)
 
-    console.log('【新标签页脚本】拦截 pushState → 新标签页打开并聚焦:', fullUrl)
-    // 不调用 origPushState → 当前页彻底不动
+    console.log('【新标签页脚本】拦截 pushState → 新标签页打开:', fullUrl)
+    // 不调用 origPushState
   }
 
   history.replaceState = function (state, title, url) {
-    // replaceState 通常只是清理参数，不视为新页面，允许原样执行
+    lastTriggerTime = Date.now()
+    lastOpenTime = Date.now()
+    if (typeof url === 'string') lastOpenUrl = url
     return origReplaceState.apply(this, arguments)
   }
 
@@ -147,10 +204,10 @@
     lastTriggerTime = Date.now()
     sessionStorage.setItem('openedByScript', 'true')
     setTimeout(() => safeOpenInTab(e.newURL, { active: true }), 50)
-    console.log('【新标签页脚本】hashchange → 新标签页打开并聚焦:', e.newURL)
+    console.log('【新标签页脚本】hashchange → 新标签页打开:', e.newURL)
   })
 
-  // === 3. 拦截 window.open（部分网站使用）===
+  // === 4. 拦截 window.open ===
   const origOpen = window.open
   window.open = function (url, name, features) {
     if (typeof url === 'string' && url) {
@@ -161,7 +218,7 @@
       if (fullUrl !== location.href) {
         sessionStorage.setItem('openedByScript', 'true')
         safeOpenInTab(fullUrl, { active: true })
-        return null // 模拟打开成功
+        return null
       }
     }
     return origOpen.apply(this, arguments)
